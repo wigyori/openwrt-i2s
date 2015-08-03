@@ -1,0 +1,56 @@
+From 7c2fd3ca6f92953db8adebdbd5493e1d9b51c8c4 Mon Sep 17 00:00:00 2001
+From: Marcus Cooper <codekipper@gmail.com>
+Date: Tue, 28 Jul 2015 13:37:40 +0200
+Subject: [PATCH] Add I2S blocks to dtsi for A10 and A20
+
+---
+ arch/arm/boot/dts/sun4i-a10.dtsi | 12 ++++++++++++
+ arch/arm/boot/dts/sun7i-a20.dtsi | 12 ++++++++++++
+ 2 files changed, 24 insertions(+)
+
+diff --git a/arch/arm/boot/dts/sun4i-a10.dtsi b/arch/arm/boot/dts/sun4i-a10.dtsi
+index 47749c1..4dfc15ae 100644
+--- a/arch/arm/boot/dts/sun4i-a10.dtsi
++++ b/arch/arm/boot/dts/sun4i-a10.dtsi
+@@ -1164,6 +1164,18 @@
+ 			reg = <0x01c23800 0x10>;
+ 		};
+ 
++		i2s: i2s@01c22400 {
++			#sound-dai-cells = <0>;
++			compatible = "allwinner,sun4i-a20-i2s";
++			reg = <0x01c22400 0x40>;
++			interrupts = <16>;
++			clocks = <&apb0_gates 3>, <&pll2 0>, <&i2s_clk>;
++			clock-names = "apb", "audio", "i2s";
++			dmas = <&dma 0 3>, <&dma 0 3>;
++			dma-names = "rx", "tx";
++			status = "disabled";
++		};
++
+ 		rtp: rtp@01c25000 {
+ 			compatible = "allwinner,sun4i-a10-ts";
+ 			reg = <0x01c25000 0x100>;
+diff --git a/arch/arm/boot/dts/sun7i-a20.dtsi b/arch/arm/boot/dts/sun7i-a20.dtsi
+index 025ac2f..1670afa 100644
+--- a/arch/arm/boot/dts/sun7i-a20.dtsi
++++ b/arch/arm/boot/dts/sun7i-a20.dtsi
+@@ -1380,6 +1380,18 @@
+ 			status = "disabled";
+ 		};
+ 
++		i2s0: i2s@01c22400 {
++			#sound-dai-cells = <0>;
++			compatible = "allwinner,sun7i-a20-i2s";
++			reg = <0x01c22400 0x40>;
++			interrupts = <GIC_SPI 16 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&apb0_gates 3>, <&pll2 0>, <&i2s0_clk>;
++			clock-names = "apb", "audio", "i2s";
++			dmas = <&dma 0 3>, <&dma 0 3>;
++			dma-names = "rx", "tx";
++			status = "disabled";
++		};
++
+ 		sid: eeprom@01c23800 {
+ 			compatible = "allwinner,sun7i-a20-sid";
+ 			reg = <0x01c23800 0x200>;

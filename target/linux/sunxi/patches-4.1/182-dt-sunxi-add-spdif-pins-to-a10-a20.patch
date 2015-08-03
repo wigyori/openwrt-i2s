@@ -1,0 +1,53 @@
+From fef7e15a9711911e7db05958c0f90e69e6b9cccc Mon Sep 17 00:00:00 2001
+From: Marcus Cooper <codekipper@gmail.com>
+Date: Tue, 28 Jul 2015 11:10:52 +0200
+Subject: [PATCH] Add SPDIF pins to A10 and A20
+
+---
+ arch/arm/boot/dts/sun4i-a10.dtsi |  7 +++++++
+ arch/arm/boot/dts/sun7i-a20.dtsi | 14 ++++++++++++++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/arch/arm/boot/dts/sun4i-a10.dtsi b/arch/arm/boot/dts/sun4i-a10.dtsi
+index 365fde7f..beb877a 100644
+--- a/arch/arm/boot/dts/sun4i-a10.dtsi
++++ b/arch/arm/boot/dts/sun4i-a10.dtsi
+@@ -1039,6 +1039,13 @@
+ 				allwinner,drive = <0>;
+ 				allwinner,pull = <0>;
+ 			};
++
++			spdif_pins_a: spdif@0 {
++				allwinner,pins = "PB13";
++				allwinner,function = "spdif";
++				allwinner,drive = <0>;
++				allwinner,pull = <1>;
++			};
+ 		};
+ 
+ 		timer@01c20c00 {
+diff --git a/arch/arm/boot/dts/sun7i-a20.dtsi b/arch/arm/boot/dts/sun7i-a20.dtsi
+index 6496431..c0742af 100644
+--- a/arch/arm/boot/dts/sun7i-a20.dtsi
++++ b/arch/arm/boot/dts/sun7i-a20.dtsi
+@@ -1248,6 +1248,20 @@
+ 				allwinner,drive = <0>;
+ 				allwinner,pull = <0>;
+ 			};
++
++			spdif_tx_pins_a: spdif@0 {
++				allwinner,pins = "PB13";
++				allwinner,function = "spdif";
++				allwinner,drive = <0>;
++				allwinner,pull = <1>;
++			};
++
++			spdif_rx_pins_a: spdif@1 {
++				allwinner,pins = "PB12";
++				allwinner,function = "spdif";
++				allwinner,drive = <0>;
++				allwinner,pull = <0>;
++			};
+ 		};
+ 
+ 		timer@01c20c00 {

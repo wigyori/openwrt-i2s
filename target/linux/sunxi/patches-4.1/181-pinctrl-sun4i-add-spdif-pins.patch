@@ -1,0 +1,39 @@
+From 03e0c921afad36b430bd6a32ef56a64760064957 Mon Sep 17 00:00:00 2001
+From: Marcus Cooper <codekipper@gmail.com>
+Date: Tue, 27 May 2014 12:00:29 +0200
+Subject: [PATCH] pinctrl: sun4i: add spdif pins
+
+---
+ drivers/pinctrl/sunxi/pinctrl-sun4i-a10.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/pinctrl/sunxi/pinctrl-sun4i-a10.c b/drivers/pinctrl/sunxi/pinctrl-sun4i-a10.c
+index 7376a97..daf7dec 100644
+--- a/drivers/pinctrl/sunxi/pinctrl-sun4i-a10.c
++++ b/drivers/pinctrl/sunxi/pinctrl-sun4i-a10.c
+@@ -135,7 +135,8 @@ static const struct sunxi_desc_pin sun4i_a10_pins[] = {
+ 	SUNXI_PIN(SUNXI_PINCTRL_PIN(B, 3),
+ 		  SUNXI_FUNCTION(0x0, "gpio_in"),
+ 		  SUNXI_FUNCTION(0x1, "gpio_out"),
+-		  SUNXI_FUNCTION(0x2, "ir0")),		/* TX */
++		  SUNXI_FUNCTION(0x2, "ir0"),		/* TX */
++		  SUNXI_FUNCTION(0x4, "spdif")),        /* MCLK */
+ 	SUNXI_PIN(SUNXI_PINCTRL_PIN(B, 4),
+ 		  SUNXI_FUNCTION(0x0, "gpio_in"),
+ 		  SUNXI_FUNCTION(0x1, "gpio_out"),
+@@ -176,11 +177,13 @@ static const struct sunxi_desc_pin sun4i_a10_pins[] = {
+ 		  SUNXI_FUNCTION(0x0, "gpio_in"),
+ 		  SUNXI_FUNCTION(0x1, "gpio_out"),
+ 		  SUNXI_FUNCTION(0x2, "i2s"),		/* DI */
+-		  SUNXI_FUNCTION(0x3, "ac97")),		/* DI */
++		  SUNXI_FUNCTION(0x3, "ac97"),		/* DI */
++		  SUNXI_FUNCTION(0x4, "spdif")),        /* DI */
+ 	SUNXI_PIN(SUNXI_PINCTRL_PIN(B, 13),
+ 		  SUNXI_FUNCTION(0x0, "gpio_in"),
+ 		  SUNXI_FUNCTION(0x1, "gpio_out"),
+-		  SUNXI_FUNCTION(0x2, "spi2")),		/* CS1 */
++		  SUNXI_FUNCTION(0x2, "spi2"),		/* CS1 */
++		  SUNXI_FUNCTION(0x4, "spdif")),        /* DO */
+ 	SUNXI_PIN(SUNXI_PINCTRL_PIN(B, 14),
+ 		  SUNXI_FUNCTION(0x0, "gpio_in"),
+ 		  SUNXI_FUNCTION(0x1, "gpio_out"),

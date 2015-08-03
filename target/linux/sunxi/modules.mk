@@ -61,10 +61,8 @@ $(eval $(call KernelPackage,eeprom-sunxi))
 define KernelPackage/ata-sunxi
     TITLE:=AllWinner sunXi AHCI SATA support
     SUBMENU:=$(BLOCK_MENU)
-    DEPENDS:=@TARGET_sunxi +kmod-scsi-core
-    KCONFIG:=\
-	CONFIG_AHCI_SUNXI \
-	CONFIG_SATA_AHCI_PLATFORM
+    DEPENDS:=@TARGET_sunxi +kmod-ata-ahci-platform +kmod-scsi-core
+    KCONFIG:=CONFIG_AHCI_SUNXI
     FILES:=$(LINUX_DIR)/drivers/ata/ahci_sunxi.ko
     AUTOLOAD:=$(call AutoLoad,41,ahci_sunxi,1)
 endef
@@ -101,4 +99,61 @@ define KernelPackage/wdt-sunxi/description
 endef
 
 $(eval $(call KernelPackage,wdt-sunxi))
+
+
+define KernelPackage/sound-soc-sunxi
+  TITLE:=AllWinner built-in SoC sound support
+  KCONFIG:= \
+	CONFIG_SND_SUNXI_SOC_CODEC
+  FILES:= \
+	$(LINUX_DIR)/sound/soc/sunxi/sunxi-codec.ko
+  AUTOLOAD:=$(call AutoLoad,65,sunxi-codec)
+  DEPENDS:=@TARGET_sunxi +kmod-sound-soc-core
+  $(call AddDepends/sound)
+endef
+
+define KernelPackage/sound-soc-sunxi/description
+  Kernel support for AllWinner built-in SoC audio
+endef
+
+$(eval $(call KernelPackage,sound-soc-sunxi))
+
+
+define KernelPackage/sound-soc-sunxi-i2s
+  TITLE:=AllWinner SoC sound I2S support
+  KCONFIG:= \
+	CONFIG_SND_SUNXI_SOC_I2S
+  FILES:= \
+	$(LINUX_DIR)/sound/soc/sunxi/sunxi-i2s.ko
+  AUTOLOAD:=$(call AutoLoad,65,sunxi-i2s)
+  DEPENDS:=@TARGET_sunxi +kmod-sound-soc-core
+  $(call AddDepends/sound)
+endef
+
+define KernelPackage/sound-soc-sunxi-i2s/description
+  Kernel support for AllWinner SoC I2S audio
+endef
+
+$(eval $(call KernelPackage,sound-soc-sunxi-i2s))
+
+
+define KernelPackage/sound-soc-sunxi-spdif
+  TITLE:=AllWinner SoC sound SPDIF support
+  KCONFIG:= \
+	CONFIG_SND_SUNXI_DAI_SPDIF \
+	CONFIG_SND_SUNXI_MACHINE_SPDIF
+  FILES:= \
+	$(LINUX_DIR)/sound/soc/sunxi/snd-soc-sunxi-dai-spdif.ko \
+	$(LINUX_DIR)/sound/soc/sunxi/snd-soc-sunxi-machine-spdif.ko
+  AUTOLOAD:=$(call AutoLoad,65,snd-soc-sunxi-dai-spdif snd-soc-sunxi-machine-spdif)
+  DEPENDS:=@TARGET_sunxi +kmod-sound-soc-core
+  $(call AddDepends/sound)
+endef
+
+define KernelPackage/sound-soc-sunxi-spdif/description
+  Kernel support for AllWinner SoC SPDIF audio
+endef
+
+$(eval $(call KernelPackage,sound-soc-sunxi-spdif))
+
 

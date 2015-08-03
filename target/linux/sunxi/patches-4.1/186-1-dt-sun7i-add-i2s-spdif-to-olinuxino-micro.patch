@@ -1,0 +1,19 @@
+diff -ruN old/arch/arm/boot/dts/sun7i-a20-olinuxino-micro.dts new/arch/arm/boot/dts/sun7i-a20-olinuxino-micro.dts
+--- old/arch/arm/boot/dts/sun7i-a20-olinuxino-micro.dts	2015-08-02 18:46:29.000000000 +0200
++++ new/arch/arm/boot/dts/sun7i-a20-olinuxino-micro.dts	2015-08-02 20:10:16.206150116 +0200
+@@ -252,3 +252,15 @@
+ 		"Headphone Jack", "HP Right";
+ 	status = "okay";
+ };
++
++&i2s0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&i2s0_mclk> , <&i2s0_bclk> , <&i2s0_lrclk> , <&i2s0_sdo0> , <&i2s0_sdi> ;
++	status = "okay";
++};
++
++&spdif {
++	pinctrl-names = "default";
++	pinctrl-0 = <&spdif_tx_pins_a>;
++	status = "okay";
++};

@@ -1,0 +1,120 @@
+From 51d52874e2d4132748b433062dd0e7d0a9a6cb9f Mon Sep 17 00:00:00 2001
+From: Marcus Cooper <codekipper@gmail.com>
+Date: Tue, 28 Jul 2015 11:03:07 +0200
+Subject: [PATCH] rename i2s clocks and add all other audio clocks to A10 dtsi
+
+---
+ arch/arm/boot/dts/sun4i-a10.dtsi | 26 +++++++++++++++++++++++++-
+ arch/arm/boot/dts/sun7i-a20.dtsi | 21 +++++++++++----------
+ 2 files changed, 36 insertions(+), 11 deletions(-)
+
+diff --git a/arch/arm/boot/dts/sun4i-a10.dtsi b/arch/arm/boot/dts/sun4i-a10.dtsi
+index e5375ec..365fde7f 100644
+--- a/arch/arm/boot/dts/sun4i-a10.dtsi
++++ b/arch/arm/boot/dts/sun4i-a10.dtsi
+@@ -292,7 +292,7 @@
+ 			reg = <0x01c20068 0x4>;
+ 			clocks = <&apb0>;
+ 			clock-output-names = "apb0_codec", "apb0_spdif",
+-				"apb0_ac97", "apb0_iis", "apb0_pio", "apb0_ir0",
++				"apb0_ac97", "apb0_i2s", "apb0_pio", "apb0_ir0",
+ 				"apb0_ir1", "apb0_keypad";
+ 		};
+ 
+@@ -437,6 +437,30 @@
+ 			clock-output-names = "ir1";
+ 		};
+ 
++		i2s_clk: clk@01c200b8 {
++			#clock-cells = <0>;
++			compatible = "allwinner,sun4i-a10-mod1-clk";
++			reg = <0x01c200b8 0x4>;
++			clocks = <&pll2 3>, <&pll2 2>, <&pll2 1>, <&pll2 0>;
++			clock-output-names = "i2s";
++		};
++
++		ac97_clk: clk@01c200bc {
++			#clock-cells = <0>;
++			compatible = "allwinner,sun4i-a10-mod1-clk";
++			reg = <0x01c200bc 0x4>;
++			clocks = <&pll2 3>, <&pll2 2>, <&pll2 1>, <&pll2 0>;
++			clock-output-names = "ac97";
++		};
++
++		spdif_clk: clk@01c200c0 {
++			#clock-cells = <0>;
++			compatible = "allwinner,sun4i-a10-mod1-clk";
++			reg = <0x01c200c0 0x4>;
++			clocks = <&pll2 3>, <&pll2 2>, <&pll2 1>, <&pll2 0>;
++			clock-output-names = "spdif";
++		};
++
+ 		usb_clk: clk@01c200cc {
+ 			#clock-cells = <1>;
+ 			#reset-cells = <1>;
+diff --git a/arch/arm/boot/dts/sun7i-a20.dtsi b/arch/arm/boot/dts/sun7i-a20.dtsi
+index 9b9bf5f..6496431 100644
+--- a/arch/arm/boot/dts/sun7i-a20.dtsi
++++ b/arch/arm/boot/dts/sun7i-a20.dtsi
+@@ -304,9 +304,9 @@
+ 			reg = <0x01c20068 0x4>;
+ 			clocks = <&apb0>;
+ 			clock-output-names = "apb0_codec", "apb0_spdif",
+-				"apb0_ac97", "apb0_iis0", "apb0_iis1",
++				"apb0_ac97", "apb0_i2s0", "apb0_i2s1",
+ 				"apb0_pio", "apb0_ir0", "apb0_ir1",
+-				"apb0_iis2", "apb0_keypad";
++				"apb0_i2s2", "apb0_keypad";
+ 		};
+ 
+ 		apb1: clk@01c20058 {
+@@ -450,12 +450,12 @@
+ 			clock-output-names = "ir1";
+ 		};
+ 
+-		iis0_clk: clk@01c200b8 {
++		i2s0_clk: clk@01c200b8 {
+ 			#clock-cells = <0>;
+ 			compatible = "allwinner,sun4i-a10-mod1-clk";
+ 			reg = <0x01c200b8 0x4>;
+-			clocks = <&pll2 0>, <&pll2 1>, <&pll2 2>, <&pll2 3>;
+-			clock-output-names = "iis0";
++			clocks = <&pll2 3>, <&pll2 2>, <&pll2 1>, <&pll2 0>;
++			clock-output-names = "i2s0";
+ 		};
+ 
+ 		ac97_clk: clk@01c200bc {
+@@ -473,6 +473,7 @@
+ 			clocks = <&pll2 3>, <&pll2 2>, <&pll2 1>, <&pll2 0>;
+ 			clock-output-names = "spdif";
+ 		};
++
+ 		usb_clk: clk@01c200cc {
+ 			#clock-cells = <1>;
+ 			#reset-cells = <1>;
+@@ -491,20 +492,20 @@
+ 			clock-output-names = "spi3";
+ 		};
+ 
+-		iis1_clk: clk@01c200d8 {
++		i2s1_clk: clk@01c200d8 {
+ 			#clock-cells = <0>;
+ 			compatible = "allwinner,sun4i-a10-mod1-clk";
+ 			reg = <0x01c200d8 0x4>;
+-			clocks = <&pll2 0>, <&pll2 1>, <&pll2 2>, <&pll2 3>;
+-			clock-output-names = "iis1";
++			clocks = <&pll2 3>, <&pll2 2>, <&pll2 1>, <&pll2 0>;
++			clock-output-names = "i2s1";
+ 		};
+ 
+-		iis2_clk: clk@01c200dc {
++		i2s2_clk: clk@01c200dc {
+ 			#clock-cells = <0>;
+ 			compatible = "allwinner,sun4i-a10-mod1-clk";
+ 			reg = <0x01c200dc 0x4>;
+ 			clocks = <&pll2 0>, <&pll2 1>, <&pll2 2>, <&pll2 3>;
+-			clock-output-names = "iis2";
++			clock-output-names = "i2s2";
+ 		};
+ 
+ 		codec_clk: clk@01c20140 {

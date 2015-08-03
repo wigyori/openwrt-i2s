@@ -1,0 +1,1195 @@
+From 41f1838321255f5e21b76508dec985a96f3e180e Mon Sep 17 00:00:00 2001
+From: Marcus Cooper <codekipper@gmail.com>
+Date: Tue, 28 Jul 2015 11:20:06 +0200
+Subject: [PATCH] Initial commit of SUNXI SPDIF
+
+---
+ arch/arm/boot/dts/sun4i-a10.dtsi      |  14 +
+ arch/arm/boot/dts/sun7i-a20.dtsi      |  14 +
+ sound/soc/sunxi/Kconfig               |  14 +
+ sound/soc/sunxi/Makefile              |   4 +
+ sound/soc/sunxi/sunxi-machine-spdif.c | 107 ++++
+ sound/soc/sunxi/sunxi-spdif.c         | 976 ++++++++++++++++++++++++++++++++++
+ 6 files changed, 1129 insertions(+)
+ create mode 100644 sound/soc/sunxi/sunxi-machine-spdif.c
+ create mode 100644 sound/soc/sunxi/sunxi-spdif.c
+
+diff --git a/arch/arm/boot/dts/sun4i-a10.dtsi b/arch/arm/boot/dts/sun4i-a10.dtsi
+index beb877a..b5957269 100644
+--- a/arch/arm/boot/dts/sun4i-a10.dtsi
++++ b/arch/arm/boot/dts/sun4i-a10.dtsi
+@@ -1074,6 +1074,20 @@
+ 			status = "disabled";
+ 		};
+ 
++		spdif: spdif@01c21000 {
++			#sound-dai-cells = <0>;
++			compatible = "allwinner,sun4i-a10-spdif";
++			reg = <0x01c21000 0x40>;
++			interrupts = <13>;
++			clocks = <&apb0_gates 1>, <&pll2 0>, <&spdif_clk>;
++			clock-names = "apb", "audio", "spdif";
++			dmas = <&dma 0 2>, <&dma 0 2>;
++			dma-names = "rx", "tx";
++			spdif-in = "disabled";
++			spdif-out = "disabled";
++			status = "disabled";
++		};
++
+ 		ir0: ir@01c21800 {
+ 			compatible = "allwinner,sun4i-a10-ir";
+ 			clocks = <&apb0_gates 6>, <&ir0_clk>;
+diff --git a/arch/arm/boot/dts/sun7i-a20.dtsi b/arch/arm/boot/dts/sun7i-a20.dtsi
+index c0742af..6bc42e2 100644
+--- a/arch/arm/boot/dts/sun7i-a20.dtsi
++++ b/arch/arm/boot/dts/sun7i-a20.dtsi
+@@ -1295,6 +1295,20 @@
+ 			status = "disabled";
+ 		};
+ 
++                spdif: spdif@01c21000 {
++                        #sound-dai-cells = <0>;
++                        compatible = "allwinner,sun4i-a10-spdif";
++                        reg = <0x01c21000 0x40>;
++			interrupts = <GIC_SPI 13 IRQ_TYPE_LEVEL_HIGH>;
++                        clocks = <&apb0_gates 1>, <&pll2 0>, <&spdif_clk>;
++                        clock-names = "apb", "audio", "spdif";
++                        dmas = <&dma 0 2>, <&dma 0 2>;
++                        dma-names = "rx", "tx";
++                        spdif-in = "disabled";
++                        spdif-out = "disabled";
++                        status = "disabled";
++                };
++
+ 		ir0: ir@01c21800 {
+ 			compatible = "allwinner,sun4i-a10-ir";
+ 			clocks = <&apb0_gates 6>, <&ir0_clk>;
+diff --git a/sound/soc/sunxi/Kconfig b/sound/soc/sunxi/Kconfig
+index 79511ae..66e1d23 100644
+--- a/sound/soc/sunxi/Kconfig
++++ b/sound/soc/sunxi/Kconfig
+@@ -7,4 +7,18 @@ config SND_SUNXI_SOC_CODEC
+ 	select REGMAP_MMIO
+ 	default y
+ 
++config SND_SUNXI_DAI_SPDIF
++        tristate
++        select SND_SOC_GENERIC_DMAENGINE_PCM
++        select REGMAP_MMIO
++        default m
++
++config SND_SUNXI_MACHINE_SPDIF
++        tristate "APB on-chip sun4i/sun5i/sun7i SPDIF"
++        select SND_SOC_GENERIC_DMAENGINE_PCM
++        select SND_SOC_DAI_SPDIF
++        select REGMAP_MMIO
++        default m
++        help
++          Say Y if you want to add support for SoC S/PDIF audio as simple audio card.
+ endmenu
+diff --git a/sound/soc/sunxi/Makefile b/sound/soc/sunxi/Makefile
+index b8950d3..c6c468f 100644
+--- a/sound/soc/sunxi/Makefile
++++ b/sound/soc/sunxi/Makefile
+@@ -1,2 +1,6 @@
+ obj-$(CONFIG_SND_SUNXI_SOC_CODEC) += sunxi-codec.o
+ 
++snd-soc-sunxi-dai-spdif-objs := sunxi-spdif.o
++obj-$(CONFIG_SND_SUNXI_DAI_SPDIF) += snd-soc-sunxi-dai-spdif.o
++snd-soc-sunxi-machine-spdif-objs := sunxi-machine-spdif.o
++obj-$(CONFIG_SND_SUNXI_MACHINE_SPDIF) += snd-soc-sunxi-machine-spdif.o
+diff --git a/sound/soc/sunxi/sunxi-machine-spdif.c b/sound/soc/sunxi/sunxi-machine-spdif.c
+new file mode 100644
+index 0000000..a6eff50
+--- /dev/null
++++ b/sound/soc/sunxi/sunxi-machine-spdif.c
+@@ -0,0 +1,107 @@
++/*
++ * Copyright (C) 2015 Andrea Venturi <be17068@iperbole.bo.it>
++ * From code by (C) 2013 Freescale Semiconductor, Inc. (sound/soc/fsl/imx-spdif.c)
++ *
++ * The code contained herein is licensed under the GNU General Public
++ * License. You may obtain a copy of the GNU General Public License
++ * Version 2 or later at the following locations:
++ *
++ * http://www.opensource.org/licenses/gpl-license.html
++ * http://www.gnu.org/copyleft/gpl.html
++ */
++
++#include <linux/module.h>
++#include <linux/of_platform.h>
++#include <sound/soc.h>
++
++struct alw_spdif_data {
++	struct snd_soc_dai_link dai;
++	struct snd_soc_card card;
++};
++
++static int alw_spdif_audio_probe(struct platform_device *pdev)
++{
++	struct device_node *spdif_np, *np = pdev->dev.of_node;
++	struct alw_spdif_data *data;
++	int ret = 0;
++
++	dev_dbg(&pdev->dev, "%s: Looking for spdif-controller\n", __func__ );
++	spdif_np = of_parse_phandle(np, "spdif-controller", 0);
++	if (!spdif_np) {
++		dev_err(&pdev->dev, "failed to find spdif-controller\n");
++		ret = -EINVAL;
++		goto end;
++	}
++
++	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
++	if (!data) {
++		ret = -ENOMEM;
++		goto end;
++	}
++
++	data->dai.name = "S/PDIF PCM";
++	data->dai.stream_name = "S/PDIF PCM";
++	data->dai.codec_dai_name = "snd-soc-dummy-dai";
++	data->dai.codec_name = "snd-soc-dummy";
++	data->dai.cpu_of_node = spdif_np;
++	data->dai.platform_of_node = spdif_np;
++	data->dai.playback_only = true;
++	data->dai.capture_only = true;
++
++	if (of_property_read_bool(np, "spdif-out"))
++		data->dai.capture_only = false;
++
++	if (of_property_read_bool(np, "spdif-in"))
++		data->dai.playback_only = false;
++
++	if (data->dai.playback_only && data->dai.capture_only) {
++		dev_err(&pdev->dev, "no enabled S/PDIF DAI link\n");
++		goto end;
++	}
++
++	data->card.dev = &pdev->dev;
++	data->card.dai_link = &data->dai;
++	data->card.num_links = 1;
++	data->card.owner = THIS_MODULE;
++
++	ret = snd_soc_of_parse_card_name(&data->card, "model");
++	if (ret)
++		goto end;
++
++	ret = devm_snd_soc_register_card(&pdev->dev, &data->card);
++	if (ret) {
++		dev_err(&pdev->dev, "snd_soc_register_card failed: %d\n", ret);
++		goto end;
++	}
++
++	platform_set_drvdata(pdev, data);
++
++end:
++	of_node_put(spdif_np);
++
++	return ret;
++}
++
++#ifdef CONFIG_OF
++static const struct of_device_id alw_spdif_dt_ids[] = {
++	{ .compatible = "allwinner,sunxi-audio-spdif", },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, alw_spdif_dt_ids);
++#endif
++
++static struct platform_driver alw_spdif_driver = {
++	.driver = {
++		.name = "sunxi-machine-spdif",
++		.of_match_table = alw_spdif_dt_ids,
++	},
++	.probe = alw_spdif_audio_probe,
++};
++
++module_platform_driver(alw_spdif_driver);
++
++MODULE_AUTHOR("Marcus Cooper <codekipper@gmail.com>");
++MODULE_AUTHOR("Andrea Venturi, <be17068@iperbole.bo.it>");
++MODULE_DESCRIPTION("Allwinner sunxi S/PDIF machine driver");
++MODULE_LICENSE("GPL v2");
++//MODULE_ALIAS("platform:sunxi-machine-spdif");
+diff --git a/sound/soc/sunxi/sunxi-spdif.c b/sound/soc/sunxi/sunxi-spdif.c
+new file mode 100644
+index 0000000..5fa9649
+--- /dev/null
++++ b/sound/soc/sunxi/sunxi-spdif.c
+@@ -0,0 +1,976 @@
++/*
++ * ALSA SoC SPDIF Audio Layer
++ *
++ * This file is licensed under the terms of the GNU General Public
++ * License version 2. This program is licensed "as is" without any
++ * warranty of any kind, whether express or implied.
++ */
++
++/*
++ * this is SPDIF sunxi simple audio card DAI driver
++ * use codec "dummy driver" as per
++ * http://mailman.alsa-project.org/pipermail/alsa-devel/2013-December/070534.html
++ */
++#include <linux/clk.h>
++#include <linux/delay.h>
++#include <linux/device.h>
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/regmap.h>
++#include <linux/of_address.h>
++#include <linux/of_device.h>
++#include <linux/of_irq.h>
++#include <linux/ioport.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <sound/dmaengine_pcm.h>
++#include <sound/soc.h>
++
++#define	SUNXI_SPDIF_CTL	(0x00)
++	#define SUNXI_SPDIF_CTL_MCLKDIV(v)		((v) << 4) /* v even */
++	#define SUNXI_SPDIF_CTL_MCLKOUTEN		BIT(2)
++	#define SUNXI_SPDIF_CTL_GEN			BIT(1)
++	#define SUNXI_SPDIF_CTL_RESET			BIT(0)
++
++#define SUNXI_SPDIF_TXCFG (0x04)
++	#define SUNXI_SPDIF_TXCFG_SINGLEMOD		BIT(31)
++	#define SUNXI_SPDIF_TXCFG_ASS			BIT(17)
++	#define SUNXI_SPDIF_TXCFG_NONAUDIO		BIT(16)
++	#define SUNXI_SPDIF_TXCFG_TXRATIO(v)		((v) << 4)
++	#define SUNXI_SPDIF_TXCFG_FMTRVD		(3 << 2)
++	#define SUNXI_SPDIF_TXCFG_FMT16BIT		(0 << 2)
++	#define SUNXI_SPDIF_TXCFG_FMT20BIT		(1 << 2)
++	#define SUNXI_SPDIF_TXCFG_FMT24BIT		(2 << 2)
++	#define SUNXI_SPDIF_TXCFG_CHSTMODE		BIT(1)
++	#define SUNXI_SPDIF_TXCFG_TXEN			BIT(0)
++
++#define SUNXI_SPDIF_RXCFG (0x08)
++	#define SUNXI_SPDIF_RXCFG_LOCKFLAG		BIT(4)
++	#define SUNXI_SPDIF_RXCFG_CHSTSRC		BIT(3)
++	#define SUNXI_SPDIF_RXCFG_CHSTCP		BIT(1)
++	#define SUNXI_SPDIF_RXCFG_RXEN			BIT(0)
++
++#define SUNXI_SPDIF_TXFIFO (0x0C)
++
++#define SUNXI_SPDIF_RXFIFO (0x10)
++
++#define SUNXI_SPDIF_FCTL (0x14)
++	#define SUNXI_SPDIF_FCTL_FIFOSRC		BIT(31)
++	#define SUNXI_SPDIF_FCTL_FTX			BIT(17)
++	#define SUNXI_SPDIF_FCTL_FRX			BIT(16)
++	#define SUNXI_SPDIF_FCTL_TXTL(v)		((v) << 8)
++	#define SUNXI_SPDIF_FCTL_RXTL(v)		((v) << 3)
++	#define SUNXI_SPDIF_FCTL_TXIM(v)		((v) << 2)
++	#define SUNXI_SPDIF_FCTL_RXOM(v)		((v) << 0)
++
++#define SUNXI_SPDIF_FSTA (0x18)
++	#define SUNXI_SPDIF_FSTA_TXE			BIT(14)
++	#define SUNXI_SPDIF_FSTA_TXECNTSHT		(8)
++	#define SUNXI_SPDIF_FSTA_RXA			BIT(6)
++	#define SUNXI_SPDIF_FSTA_RXACNTSHT		(0)
++
++#define SUNXI_SPDIF_INT (0x1C)
++	#define SUNXI_SPDIF_INT_RXLOCKEN		BIT(18)
++	#define SUNXI_SPDIF_INT_RXUNLOCKEN		BIT(17)
++	#define SUNXI_SPDIF_INT_RXPARERREN		BIT(16)
++	#define SUNXI_SPDIF_INT_TXDRQEN			BIT(7)
++	#define SUNXI_SPDIF_INT_TXUIEN			BIT(6)
++	#define SUNXI_SPDIF_INT_TXOIEN			BIT(5)
++	#define SUNXI_SPDIF_INT_TXEIEN			BIT(4)
++	#define SUNXI_SPDIF_INT_RXDRQEN			BIT(2)
++	#define SUNXI_SPDIF_INT_RXOIEN			BIT(1)
++	#define SUNXI_SPDIF_INT_RXAIEN			BIT(0)
++
++#define SUNXI_SPDIF_ISTA (0x20)
++	#define SUNXI_SPDIF_ISTA_RXLOCKSTA		BIT(18)
++	#define SUNXI_SPDIF_ISTA_RXUNLOCKSTA		BIT(17)
++	#define SUNXI_SPDIF_ISTA_RXPARERRSTA		BIT(16)
++	#define SUNXI_SPDIF_ISTA_TXUSTA			BIT(6)
++	#define SUNXI_SPDIF_ISTA_TXOSTA			BIT(5)
++	#define SUNXI_SPDIF_ISTA_TXESTA			BIT(4)
++	#define SUNXI_SPDIF_ISTA_RXOSTA			BIT(1)
++	#define SUNXI_SPDIF_ISTA_RXASTA			BIT(0)
++
++#define SUNXI_SPDIF_TXCNT	(0x24)
++
++#define SUNXI_SPDIF_RXCNT	(0x28)
++
++#define SUNXI_SPDIF_TXCHSTA0 (0x2C)
++	#define SUNXI_SPDIF_TXCHSTA0_CLK(v)		((v) << 28)
++	#define SUNXI_SPDIF_TXCHSTA0_SAMFREQ(v)		((v) << 24)
++	#define SUNXI_SPDIF_TXCHSTA0_CHNUM(v)		((v) << 20)
++	#define SUNXI_SPDIF_TXCHSTA0_SRCNUM(v)		((v) << 16)
++	#define SUNXI_SPDIF_TXCHSTA0_CATACOD(v)		((v) << 8)
++	#define SUNXI_SPDIF_TXCHSTA0_MODE(v)		((v) << 6)
++	#define SUNXI_SPDIF_TXCHSTA0_EMPHASIS(v)	((v) << 3)
++	#define SUNXI_SPDIF_TXCHSTA0_CP			BIT(2)
++	#define SUNXI_SPDIF_TXCHSTA0_AUDIO		BIT(1)
++	#define SUNXI_SPDIF_TXCHSTA0_PRO		BIT(0)
++
++#define SUNXI_SPDIF_TXCHSTA1 (0x30)
++	#define SUNXI_SPDIF_TXCHSTA1_CGMSA(v)		((v) << 8)
++	#define SUNXI_SPDIF_TXCHSTA1_ORISAMFREQ(v)	((v) << 4)
++	#define SUNXI_SPDIF_TXCHSTA1_SAMWORDLEN(v)	((v) << 1)
++	#define SUNXI_SPDIF_TXCHSTA1_MAXWORDLEN		BIT(0)
++
++#define SUNXI_SPDIF_RXCHSTA0 (0x34)
++	#define SUNXI_SPDIF_RXCHSTA0_CLK(v)		((v) << 28)
++	#define SUNXI_SPDIF_RXCHSTA0_SAMFREQ(v)		((v) << 24)
++	#define SUNXI_SPDIF_RXCHSTA0_CHNUM(v)		((v) << 20)
++	#define SUNXI_SPDIF_RXCHSTA0_SRCNUM(v)		((v) << 16)
++	#define SUNXI_SPDIF_RXCHSTA0_CATACOD(v)		((v) << 8)
++	#define SUNXI_SPDIF_RXCHSTA0_MODE(v)		((v) << 6)
++	#define SUNXI_SPDIF_RXCHSTA0_EMPHASIS(v)	((v) << 3)
++	#define SUNXI_SPDIF_RXCHSTA0_CP			BIT(2)
++	#define SUNXI_SPDIF_RXCHSTA0_AUDIO		BIT(1)
++	#define SUNXI_SPDIF_RXCHSTA0_PRO		BIT(0)
++
++#define SUNXI_SPDIF_RXCHSTA1 (0x38)
++	#define SUNXI_SPDIF_RXCHSTA1_CGMSA(v)		((v) << 8)
++	#define SUNXI_SPDIF_RXCHSTA1_ORISAMFREQ(v)	((v) << 4)
++	#define SUNXI_SPDIF_RXCHSTA1_SAMWORDLEN(v)	((v) << 1)
++	#define SUNXI_SPDIF_RXCHSTA1_MAXWORDLEN		BIT(0)
++
++/* Clock dividers */
++#define SUNXI_DIV_MCLK	0
++#define SUNXI_DIV_BCLK	1
++
++struct sunxi_spdif_params {
++	u32 rate;
++	u32 core_freq;
++	u32 mute;
++};
++
++struct sunxi_spdif_dev {
++	struct platform_device *pdev;
++	struct clk *clk;
++	struct clk *apb_clk;
++	struct clk *audio_clk;
++	int irq;
++	struct snd_soc_dai_driver cpu_dai_drv;
++	struct sunxi_spdif_params saved_params;
++	u32 running;
++	struct regmap *regmap;
++	struct snd_dmaengine_dai_dma_data dma_params_tx;
++	struct snd_dmaengine_dai_dma_data dma_params_rx;
++	bool playback_supported;
++	bool capture_supported;
++	/* FIXME The name space should be allocated dynamically */
++	char name[100];
++};
++
++static void sunxi_spdif_configure(struct sunxi_spdif_dev *host)
++{
++	u32 reg_val;
++
++	/* soft reset SPDIF */
++	regmap_write(host->regmap, SUNXI_SPDIF_CTL, SUNXI_SPDIF_CTL_RESET);
++
++	/* MCLK OUTPUT enable */
++	regmap_update_bits(host->regmap, SUNXI_SPDIF_CTL,
++			SUNXI_SPDIF_CTL_MCLKOUTEN, SUNXI_SPDIF_CTL_MCLKOUTEN);
++
++	/* flush TX FIFO */
++	regmap_update_bits(host->regmap, SUNXI_SPDIF_FCTL, SUNXI_SPDIF_FCTL_FTX,
++							SUNXI_SPDIF_FCTL_FTX);
++
++	/* clear interrupt status */
++	regmap_read(host->regmap, SUNXI_SPDIF_ISTA, &reg_val);
++	regmap_write(host->regmap, SUNXI_SPDIF_ISTA, reg_val);
++
++	/* clear TX counter */
++	regmap_write(host->regmap, SUNXI_SPDIF_TXCNT, 0);
++
++}
++
++void sunxi_snd_txctrl(struct snd_pcm_substream *substream,
++						struct sunxi_spdif_dev *host, int on)
++{
++	u32 tmp;
++	regmap_read(host->regmap, SUNXI_SPDIF_TXCNT, &tmp);
++	if (substream->runtime->channels == 1) 
++		regmap_update_bits(host->regmap, SUNXI_SPDIF_TXCFG,
++						SUNXI_SPDIF_TXCFG_SINGLEMOD,
++						SUNXI_SPDIF_TXCFG_SINGLEMOD);
++
++	if (on) {
++		/* SPDIF TX ENABLE */
++		regmap_update_bits(host->regmap, SUNXI_SPDIF_TXCFG,
++						SUNXI_SPDIF_TXCFG_TXEN,
++						SUNXI_SPDIF_TXCFG_TXEN);
++
++		/* DRQ ENABLE */
++		regmap_update_bits(host->regmap, SUNXI_SPDIF_INT,
++						SUNXI_SPDIF_INT_TXDRQEN,
++						SUNXI_SPDIF_INT_TXDRQEN);
++
++		/* Global enable */
++		regmap_update_bits(host->regmap, SUNXI_SPDIF_CTL,
++						SUNXI_SPDIF_CTL_GEN,
++						SUNXI_SPDIF_CTL_GEN);
++	} else {
++		/* SPDIF TX DISABLE */
++		regmap_update_bits(host->regmap, SUNXI_SPDIF_TXCFG,
++						SUNXI_SPDIF_TXCFG_TXEN, 0);
++
++		/* DRQ DISABLE */
++		regmap_update_bits(host->regmap, SUNXI_SPDIF_INT,
++						SUNXI_SPDIF_INT_TXDRQEN, 0);
++
++		/* Global disable */
++		regmap_update_bits(host->regmap, SUNXI_SPDIF_CTL,
++						SUNXI_SPDIF_CTL_GEN, 0);
++	}
++}
++
++static int sunxi_spdif_prepare(struct snd_pcm_substream *substream,
++		struct snd_soc_dai *cpu_dai)
++{
++        struct snd_soc_pcm_runtime *rtd = substream->private_data;
++        struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(rtd->cpu_dai);
++
++	return 0;
++}
++
++static int sunxi_spdif_startup(struct snd_pcm_substream *substream,
++		struct snd_soc_dai *cpu_dai)
++{
++        struct snd_soc_pcm_runtime *rtd = substream->private_data;
++        struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(rtd->cpu_dai);
++	int ret;
++
++	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
++		return -EINVAL;
++        /* Reset module and interrupts only for first initialization */
++        if (!cpu_dai->active) {
++
++		ret = clk_prepare_enable(host->clk);
++		if (ret)
++			return ret;
++	}
++
++	host->running = true;
++	sunxi_spdif_configure(host);
++
++	return 0;
++}
++
++static void sunxi_spdif_shutdown(struct snd_pcm_substream *substream,
++		struct snd_soc_dai *dai)
++{
++        struct snd_soc_pcm_runtime *rtd = substream->private_data;
++        struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(rtd->cpu_dai);
++
++	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
++		return;
++
++	clk_disable_unprepare(host->clk);
++	host->running = false;
++}
++
++static void sunxi_spdif_clock(struct sunxi_spdif_dev *host, u32 core_freq,
++		u32 rate)
++{
++	u32 divider;
++
++	clk_set_rate(host->clk, core_freq);
++	divider = DIV_ROUND_CLOSEST(clk_get_rate(host->clk), (rate * 128));
++}
++
++typedef struct __MCLK_SET_INF {
++	__u32	samp_rate;	/* sample rate */
++	__u16	mult_fs;	/* multiply of sample rate */
++
++	__u8	clk_div;	/* mpll division */
++	__u8	mpll;		/* select mpll, 0:24.576 Mhz, 1:22.5792 Mhz */
++} __mclk_set_inf;
++
++
++typedef struct __BCLK_SET_INF {
++	__u8	bitpersamp;	/* bits per sample */
++	__u8	clk_div;	/* clock division */
++	__u16	mult_fs;	/* multiplay of sample rate */
++} __bclk_set_inf;
++
++
++static __bclk_set_inf BCLK_INF[] = {
++	/* 16bits per sample */
++	{16, 4, 128}, {16, 6, 192}, {16, 8, 256},
++	{16, 12, 384}, {16, 16, 512},
++
++	/* 24 bits per sample */
++	{24, 4, 192}, {24, 8, 384}, {24, 16, 768},
++
++	/* 32 bits per sample */
++	{32, 2, 128}, {32, 4, 256}, {32, 6, 384},
++	{32, 8, 512}, {32, 12, 768},
++
++	/* end flag */
++	{0xff, 0, 0},
++};
++
++/* TX RATIO value */
++static __mclk_set_inf MCLK_INF[] = {
++	/* 88.2k bitrate //2 */
++	{ 88200, 128, 2, 1}, { 88200, 256, 2, 1},
++
++	/* 22.05k bitrate //8 */
++	{ 22050, 128, 8, 1}, { 22050, 256, 8, 1},
++	{ 22050, 512, 8, 1},
++
++	/* 24k bitrate //8 */
++	{ 24000, 128, 8, 0}, { 24000, 256, 8, 0}, { 24000, 512, 8, 0},
++
++	/* 32k bitrate //2.048MHz 24/4 = 6 */
++	{ 32000, 128, 6, 0}, { 32000, 192, 6, 0}, { 32000, 384, 6, 0},
++	{ 32000, 768, 6, 0},
++
++	/* 48K bitrate 3.072Mbit/s 16/4 = 4 */
++	{ 48000, 128, 4, 0}, { 48000, 256, 4, 0}, { 48000, 512, 4, 0},
++
++	/* 96k bitrate 6.144MHZ 8/4 = 2 */
++	{ 96000, 128 , 2, 0}, { 96000, 256, 2, 0},
++
++	/* 192k bitrate 12.288MHZ 4/4 = 1 */
++	{192000, 128, 1, 0},
++
++	/* 44.1k bitrate 2.8224MHz 16/4 = 4 */
++	{ 44100, 128, 4, 1}, { 44100, 256, 4, 1}, { 44100, 512, 4, 1},
++
++	/* 176.4k bitrate 11.2896MHZ 4/4 = 1 */
++	{176400, 128, 1, 1},
++
++	/* end flag 0xffffffff */
++	{0xffffffff, 0, 0, 0},
++};
++
++static s32 get_clock_divder(u32 sample_rate, u32 sample_width, u32 *mclk_div,
++					u32 *mpll, u32 *bclk_div, u32 *mult_fs)
++{
++	u32 i, j, ret = -EINVAL;
++
++	for (i = 0; i < 100; i++) {
++		if ((MCLK_INF[i].samp_rate == sample_rate) &&
++					((MCLK_INF[i].mult_fs == 256) ||
++					(MCLK_INF[i].mult_fs == 128))) {
++			for (j = 0; j < ARRAY_SIZE(BCLK_INF); j++) {
++				if ((BCLK_INF[j].bitpersamp == sample_width) &&
++					(BCLK_INF[j].mult_fs ==
++							MCLK_INF[i].mult_fs)) {
++					*mclk_div = MCLK_INF[i].clk_div;
++					*mpll = MCLK_INF[i].mpll;
++					*bclk_div = BCLK_INF[j].clk_div;
++					*mult_fs = MCLK_INF[i].mult_fs;
++					ret = 0;
++					break;
++				}
++			}
++		} else if (MCLK_INF[i].samp_rate == 0xffffffff)
++			break;
++	}
++
++	return ret;
++}
++
++static int sunxi_spdif_set_fmt(struct snd_soc_dai *cpu_dai, unsigned int fmt)
++{
++	u32 reg_val;
++	struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(cpu_dai);
++
++	reg_val = 0;
++	reg_val &= ~SUNXI_SPDIF_TXCFG_SINGLEMOD;
++	reg_val |= SUNXI_SPDIF_TXCFG_ASS;
++	reg_val &= ~SUNXI_SPDIF_TXCFG_NONAUDIO;
++	reg_val |= SUNXI_SPDIF_TXCFG_FMT16BIT;
++	reg_val |= SUNXI_SPDIF_TXCFG_CHSTMODE;
++	regmap_write(host->regmap, SUNXI_SPDIF_TXCFG, reg_val);
++	reg_val = 0;
++	reg_val &= ~SUNXI_SPDIF_FCTL_FIFOSRC;
++	if (0/*sunxi_is_sun6i()*/)
++		reg_val |= SUNXI_SPDIF_FCTL_TXTL(4);
++	else
++		reg_val |= SUNXI_SPDIF_FCTL_TXTL(16);
++	reg_val |= SUNXI_SPDIF_FCTL_RXTL(15);
++	reg_val |= SUNXI_SPDIF_FCTL_TXIM(1);
++	reg_val |= SUNXI_SPDIF_FCTL_RXOM(3);
++	regmap_write(host->regmap, SUNXI_SPDIF_FCTL, reg_val);
++	if (fmt) {
++		/* non PCM */
++		regmap_update_bits(host->regmap, SUNXI_SPDIF_TXCFG,
++					SUNXI_SPDIF_TXCFG_NONAUDIO,
++					SUNXI_SPDIF_TXCFG_NONAUDIO);
++	}
++	reg_val = 0;
++	reg_val |= (SUNXI_SPDIF_TXCHSTA0_CHNUM(2));
++	regmap_write(host->regmap, SUNXI_SPDIF_TXCHSTA0, reg_val);
++
++	reg_val = 0;
++	reg_val |= (SUNXI_SPDIF_TXCHSTA1_SAMWORDLEN(1));
++	regmap_write(host->regmap, SUNXI_SPDIF_TXCHSTA1, reg_val);
++	return 0;
++}
++
++/* freq: 1: 22.5792MHz 0: 24.576MHz */
++static int sunxi_spdif_set_sysclk(struct snd_soc_dai *cpu_dai, int clk_id,
++						unsigned int freq, int dir)
++{
++	struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(cpu_dai);
++
++	if (!freq)
++		freq = 24576000;
++	else
++		freq = 22579200;
++
++	if (clk_set_rate(host->audio_clk, freq))
++		printk("%s try to set the pll2 clock rate to %d failed!\n", __func__, freq);
++	if (clk_set_rate(host->clk, freq))
++		printk("%s try to set the spdif clock rate to %d failed!\n", __func__, freq);
++	return 0;
++}
++
++static int sunxi_spdif_set_clkdiv(struct snd_soc_dai *cpu_dai, int div_id, int div)
++{
++	u32 reg_val = 0;
++	struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(cpu_dai);
++
++	regmap_read(host->regmap, SUNXI_SPDIF_TXCHSTA0, &reg_val);
++	reg_val |= ~(SUNXI_SPDIF_TXCHSTA0_SAMFREQ(0xf));
++	regmap_write(host->regmap, SUNXI_SPDIF_TXCHSTA0, reg_val);
++
++	regmap_read(host->regmap, SUNXI_SPDIF_TXCHSTA1, &reg_val);
++	reg_val |= ~(SUNXI_SPDIF_TXCHSTA1_ORISAMFREQ(0xf));
++	regmap_write(host->regmap, SUNXI_SPDIF_TXCHSTA1, reg_val);
++
++	switch (div_id) {
++	case SUNXI_DIV_MCLK: {
++		int sample_freq, original_sample_freq, rate;
++		regmap_read(host->regmap, SUNXI_SPDIF_TXCFG, &reg_val);
++		reg_val &= ~SUNXI_SPDIF_TXCFG_TXRATIO(0x1F);
++		reg_val |= SUNXI_SPDIF_TXCFG_TXRATIO(div - 1);
++		regmap_write(host->regmap, SUNXI_SPDIF_TXCFG, reg_val);
++
++		rate = clk_get_rate(host->audio_clk);
++		if (rate == 24576000) {
++			switch (div) {
++			/* 24KHZ */
++			case 8:
++				sample_freq = 6;
++				original_sample_freq = 9;
++				break;
++
++			/* 32KHZ */
++			case 6:
++				sample_freq = 3;
++				original_sample_freq = 12;
++				break;
++
++			/* 48KHZ */
++			case 4:
++				sample_freq = 2;
++				original_sample_freq = 13;
++				break;
++
++			/* 96KHZ */
++			case 2:
++				sample_freq = 10;
++				original_sample_freq = 5;
++				break;
++
++			/* 192KHZ */
++			case 1:
++				sample_freq = 14;
++				original_sample_freq = 1;
++				break;
++
++			default:
++				sample_freq = 1;
++				original_sample_freq = 0;
++				break;
++			}
++		} else {
++			/* 22.5792MHz */
++			switch (div) {
++			/* 22.05KHZ */
++			case 8:
++				sample_freq = 4;
++				original_sample_freq = 11;
++				break;
++
++			/* 44.1KHZ */
++			case 4:
++				sample_freq = 0;
++				original_sample_freq = 15;
++				break;
++
++			/* 88.2KHZ */
++			case 2:
++				sample_freq = 8;
++				original_sample_freq = 7;
++				break;
++
++			/* 176.4KHZ */
++			case 1:
++				sample_freq = 12;
++				original_sample_freq = 3;
++				break;
++
++			default:
++				sample_freq = 1;
++				original_sample_freq = 0;
++				break;
++			}
++		}
++		regmap_read(host->regmap, SUNXI_SPDIF_TXCHSTA0, &reg_val);
++		reg_val |= (SUNXI_SPDIF_TXCHSTA0_SAMFREQ(sample_freq));
++		regmap_write(host->regmap, SUNXI_SPDIF_TXCHSTA0, reg_val);
++
++		regmap_read(host->regmap, SUNXI_SPDIF_TXCHSTA1, &reg_val);
++		reg_val |= (SUNXI_SPDIF_TXCHSTA1_ORISAMFREQ(original_sample_freq));
++		regmap_write(host->regmap, SUNXI_SPDIF_TXCHSTA1, reg_val);
++	}
++	break;
++	case SUNXI_DIV_BCLK:
++	break;
++
++	default:
++		return -EINVAL;
++	}
++	return 0;
++}
++
++static int sunxi_spdif_hw_params(struct snd_pcm_substream *substream,
++					struct snd_pcm_hw_params *params,
++					struct snd_soc_dai *cpu_dai)
++{
++        struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(cpu_dai);
++	int ret = 0;
++	int fmt;
++	unsigned long rate = params_rate(params);
++	u32 mclk_div = 0, mpll = 0, bclk_div = 0, mult_fs = 0;
++
++	get_clock_divder(rate, 32, &mclk_div, &mpll, &bclk_div, &mult_fs);
++
++	/* Add the PCM and raw data select interface */
++	switch (params_channels(params)) {
++	case 1:/* PCM mode */
++	case 2:
++		fmt = 0;
++		break;
++	case 4:/* raw data mode */
++		fmt = 1;
++		break;
++	default:
++		return -EINVAL;
++	}
++	ret = snd_soc_dai_set_fmt(cpu_dai, fmt);
++	if (ret < 0)
++		return ret;
++	ret = sunxi_spdif_set_sysclk(cpu_dai, 0 , mpll, 0);
++	if (ret < 0)
++		return ret;
++	ret = sunxi_spdif_set_clkdiv(cpu_dai, SUNXI_DIV_MCLK, mclk_div);
++	if (ret < 0)
++		return ret;
++	ret = sunxi_spdif_set_clkdiv(cpu_dai, SUNXI_DIV_BCLK, bclk_div);
++	if (ret < 0)
++		return ret;
++	return 0;
++}
++
++static int sunxi_spdif_trigger(struct snd_pcm_substream *substream, int cmd,
++		struct snd_soc_dai *dai)
++{
++	int ret=0;
++        struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(dai);
++
++	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
++		return -EINVAL;
++
++	switch (cmd) {
++	case SNDRV_PCM_TRIGGER_START://1
++	case SNDRV_PCM_TRIGGER_RESUME://6
++	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE://4
++		sunxi_snd_txctrl(substream, host, 1);
++		break;
++
++	case SNDRV_PCM_TRIGGER_STOP://0
++	case SNDRV_PCM_TRIGGER_SUSPEND://5
++	case SNDRV_PCM_TRIGGER_PAUSE_PUSH://3
++		sunxi_snd_txctrl(substream, host, 0);
++		break;
++
++	default:
++		ret = -EINVAL;
++		break;
++	}
++	return ret;
++}
++
++static int sunxi_spdif_digital_mute(struct snd_soc_dai *dai, int mute)
++{
++	struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(dai);
++
++	u32 ctl,cfg;	
++
++	host->saved_params.mute = mute;
++	regmap_read(host->regmap, SUNXI_SPDIF_CTL, &ctl);
++	regmap_read(host->regmap, SUNXI_SPDIF_TXCFG, &cfg);
++
++	return 0;
++}
++
++static int sunxi_spdif_mute_get(struct snd_kcontrol *kcontrol,
++		struct snd_ctl_elem_value *ucontrol)
++{
++        struct snd_soc_dai *cpu_dai = snd_kcontrol_chip(kcontrol);
++        struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(cpu_dai);
++
++	ucontrol->value.integer.value[0] = host->saved_params.mute;
++
++	return 0;
++}
++
++static int sunxi_spdif_mute_put(struct snd_kcontrol *kcontrol,
++		struct snd_ctl_elem_value *ucontrol)
++{
++        struct snd_soc_dai *cpu_dai = snd_kcontrol_chip(kcontrol);
++        struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(cpu_dai);
++
++	if (host->saved_params.mute == ucontrol->value.integer.value[0])
++		return 0;
++
++	sunxi_spdif_digital_mute(cpu_dai, ucontrol->value.integer.value[0]);
++	return 1;
++}
++
++static const struct snd_kcontrol_new sunxi_spdif_controls[] = {
++	SOC_SINGLE_BOOL_EXT("IEC958 Playback Switch", 0,
++			sunxi_spdif_mute_get, sunxi_spdif_mute_put),
++};
++
++static int sunxi_spdif_soc_dai_probe(struct snd_soc_dai *dai)
++{
++        struct sunxi_spdif_dev *host = snd_soc_dai_get_drvdata(dai);
++
++        snd_soc_dai_init_dma_data(dai, &host->dma_params_tx,
++                                  &host->dma_params_rx);
++
++	snd_soc_add_dai_controls(dai, sunxi_spdif_controls, ARRAY_SIZE(sunxi_spdif_controls));
++
++	return 0;
++}
++
++static const struct snd_soc_dai_ops sunxi_spdif_dai_ops = {
++	.digital_mute	= sunxi_spdif_digital_mute,
++	.startup	= sunxi_spdif_startup,
++	.shutdown	= sunxi_spdif_shutdown,
++	.trigger	= sunxi_spdif_trigger,
++	.hw_params	= sunxi_spdif_hw_params,
++	.prepare	= sunxi_spdif_prepare,
++	.set_fmt	= sunxi_spdif_set_fmt,
++//	.set_clkdiv	= sunxi_spdif_set_clkdiv,
++//	.set_sysclk	= sunxi_spdif_set_sysclk,
++};
++
++static const struct regmap_config sunxi_spdif_regmap_config = {
++	.reg_bits = 32,
++	.reg_stride = 4,
++	.val_bits = 32,
++	.max_register = SUNXI_SPDIF_RXCHSTA1,
++};
++
++static struct snd_soc_dai_driver sunxi_spdif_dai = {
++	.playback = {
++		.channels_min = 2,
++		.channels_max = 2,
++		.rates = (SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 | \
++				 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 | \
++				 SNDRV_PCM_RATE_192000),
++		.formats = SNDRV_PCM_FMTBIT_S16_LE,
++	},
++	.probe = sunxi_spdif_soc_dai_probe,
++	.ops = &sunxi_spdif_dai_ops,
++	.name = "spdif",
++};
++
++static const struct snd_soc_dapm_widget dit_widgets[] = {
++	SND_SOC_DAPM_OUTPUT("spdif-out"),
++};
++
++static const struct snd_soc_dapm_route dit_routes[] = {
++	{ "spdif-out", NULL, "Playback" },
++};
++
++/* Get spdif interrupt status and clear the interrupt */
++static u32 spdif_intr_status_clear(struct sunxi_spdif_dev *host)
++{
++        struct regmap *regmap = host->regmap;
++	struct platform_device *pdev = host->pdev;
++        u32 val;
++
++	dev_dbg(&pdev->dev, "Entered %s, stub get status and clear irq flags\n", __func__);
++        regmap_read(regmap, SUNXI_SPDIF_ISTA, &val);
++
++        regmap_write(regmap, SUNXI_SPDIF_ISTA, val);
++
++        return val=0;
++}
++
++// stub interrupt service routing.. FIXME to be enlarged and make it useful, at least for SPDIF disconnect notify!
++static irqreturn_t spdif_isr(int irq, void *devid)
++{
++        struct sunxi_spdif_dev *spdif_priv = (struct sunxi_spdif_dev *)devid;
++        struct platform_device *pdev = spdif_priv->pdev;
++        u32 sis;
++
++        sis = spdif_intr_status_clear(spdif_priv);
++
++        if (sis & SUNXI_SPDIF_ISTA_RXLOCKSTA)
++		dev_dbg(&pdev->dev, "isr: Rx lock signal\n");
++
++        if (sis & SUNXI_SPDIF_ISTA_RXPARERRSTA)
++		dev_dbg(&pdev->dev, "isr: Rx Parity error\n");
++
++        if (sis & SUNXI_SPDIF_ISTA_TXUSTA)
++		dev_dbg(&pdev->dev, "isr: Tx FIFO under/overrun\n");
++
++	/* FIXME other irq can be managed! */
++        return IRQ_HANDLED;
++}
++
++#ifdef CONFIG_OF
++static const struct of_device_id sunxi_spdif_of_match[] = {
++	{ .compatible = "allwinner,sun4i-a10-spdif", },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, sunxi_spdif_of_match);
++#endif
++
++static const struct snd_soc_component_driver sunxi_spdif_component = {
++	.name		= "sunxi-spdif",
++};
++
++/*
++ * this is SPDIF probing
++ *on the codec side, we'll use codec "dummy driver" as per
++ * http://mailman.alsa-project.org/pipermail/alsa-devel/2013-December/070534.html
++ */
++static int sunxi_spdif_probe(struct platform_device *pdev)
++{
++	struct device_node *np = pdev->dev.of_node;
++	struct sunxi_spdif_dev *host;
++	struct resource *res;
++	int irq, ret, i;
++	//struct snd_soc_card *card = &snd_soc_sunxi_spdif;
++	const struct of_device_id *of_id;
++	void __iomem *base;
++
++	dev_err(&pdev->dev, "Entered %s\n", __func__);
++
++	if (!np)
++		return -ENODEV;
++
++
++#ifdef CONFIG_OF
++	of_id = of_match_device(sunxi_spdif_of_match, &pdev->dev);
++	if (!of_id)
++		//return -EINVAL;
++		dev_err(&pdev->dev, "No matched devices so for this %s\n", __func__);
++#else
++// FIXME manage cfg without DTS?
++
++#endif
++	//host = devm_kzalloc(&pdev->dev, sizeof(*host) + strlen(np->name) + 1, GFP_KERNEL);
++	host = devm_kzalloc(&pdev->dev, sizeof(*host), GFP_KERNEL);
++	if (!host) {
++		dev_warn(&pdev->dev, "kzalloc fail\n");
++		return -ENOMEM;
++	}
++
++	strcpy(host->name, np->name);
++	host->pdev = pdev;
++
++	/* Initialize this copy of the CPU DAI driver structure */
++	memcpy(&host->cpu_dai_drv, &sunxi_spdif_dai, sizeof(sunxi_spdif_dai));
++	host->cpu_dai_drv.name = dev_name(&pdev->dev);
++
++	/* Get the addresses and IRQ */
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	base = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(base))
++		return PTR_ERR(base);
++
++	host->regmap = devm_regmap_init_mmio(&pdev->dev, base,
++						&sunxi_spdif_regmap_config);
++
++	/* Clocks */
++	host->apb_clk = devm_clk_get(&pdev->dev, "apb");
++	if (IS_ERR(host->apb_clk)) {
++		dev_err(&pdev->dev, "failed to get a apb clock.\n");
++		return PTR_ERR(host->apb_clk);
++	}
++
++	if (clk_prepare_enable(host->apb_clk)) {
++		dev_err(&pdev->dev, "try to enable apb_spdif_clk failed\n");
++		return -EINVAL;
++	}
++
++	host->audio_clk = devm_clk_get(&pdev->dev, "audio");
++	if (IS_ERR(host->audio_clk)) {
++		dev_err(&pdev->dev, "failed to get an audio clock.\n");
++		return PTR_ERR(host->audio_clk);
++	}
++
++	host->clk = devm_clk_get(&pdev->dev, "spdif");
++	if (IS_ERR(host->clk)) {
++		dev_err(&pdev->dev, "failed to get a spdif clock.\n");
++		return PTR_ERR(host->clk);
++	}
++
++	ret = clk_set_rate(host->audio_clk, 24576000);//REMOVE MAGIC NUMBER
++	if (ret) {
++		dev_err(&pdev->dev, "set spdif base clock failed!\n");
++		return ret;
++	}
++
++	if (clk_prepare_enable(host->audio_clk)) {
++		dev_err(&pdev->dev, "try to enable audio clk failed\n");
++		ret = -EINVAL;
++		goto exit_clkdisable_apb_clk;
++	}
++
++	if (clk_prepare_enable(host->apb_clk)) {
++		dev_err(&pdev->dev, "try to enable apb_clk failed\n");
++		ret = -EINVAL;
++		goto exit_clkdisable_clk;
++	}
++
++	host->irq = irq_of_parse_and_map(np, 0);
++	if (!host->irq) {
++		dev_err(&pdev->dev, "no irq for node %s\n", np->full_name);
++		return -ENXIO;
++	}
++
++        irq = platform_get_irq(pdev, 0);
++        if (irq < 0) {
++                dev_err(&pdev->dev, "no irq for node %s\n", pdev->name);
++                return irq;
++        }
++
++        ret = devm_request_irq(&pdev->dev, irq, spdif_isr, 0,
++                               dev_name(&pdev->dev), host);
++        if (ret) {
++                dev_err(&pdev->dev, "could not claim irq %u\n", irq);
++                return ret;
++        }
++	host->irq = irq;
++
++	host->playback_supported = true;
++	host->capture_supported = true;
++
++	if (of_property_read_bool(np, "spdif-out"))
++		host->playback_supported = true;
++
++	if (of_property_read_bool(np, "spdif-in"))
++		host->capture_supported = true;
++
++	if (!host->playback_supported && !host->capture_supported) {
++		dev_err(&pdev->dev, "no enabled S/PDIF DAI link\n");
++		goto exit_clkdisable_clk;
++	}
++
++	host->dma_params_tx.addr = res->start + SUNXI_SPDIF_TXFIFO;
++	host->dma_params_tx.maxburst = 4;
++	host->dma_params_tx.addr_width = DMA_SLAVE_BUSWIDTH_2_BYTES;
++	host->dma_params_rx.addr = res->start + SUNXI_SPDIF_TXFIFO;
++	host->dma_params_rx.maxburst = 4;
++	host->dma_params_rx.addr_width = DMA_SLAVE_BUSWIDTH_2_BYTES;
++
++	/* Register with ASoC */
++	dev_set_drvdata(&pdev->dev, host);
++
++	ret = devm_snd_soc_register_component(&pdev->dev, &sunxi_spdif_component,
++							&sunxi_spdif_dai, 1);
++	if (ret) {
++		goto exit_clkdisable_clk;
++	}
++
++	ret = devm_snd_dmaengine_pcm_register(&pdev->dev, NULL, 0);
++	if (ret)
++		goto exit_clkdisable_clk;
++	return 0;
++
++exit_clkdisable_clk:
++	clk_disable_unprepare(host->clk);
++exit_clkdisable_apb_clk:
++	clk_disable_unprepare(host->apb_clk);
++	return ret;
++}
++
++static int sunxi_spdif_remove(struct platform_device *pdev)
++{
++	struct sunxi_spdif_dev *host = dev_get_drvdata(&pdev->dev);
++
++        snd_soc_unregister_platform(&pdev->dev);
++        snd_soc_unregister_component(&pdev->dev);
++
++        if (!IS_ERR(host->clk))
++                clk_disable_unprepare(host->clk);
++        clk_disable_unprepare(host->apb_clk);
++
++        return 0;
++}
++
++#ifdef CONFIG_PM
++static int sunxi_spdif_suspend(struct device *dev)
++{
++	struct platform_device *pdev = to_platform_device(dev);
++	struct sunxi_spdif_dev *host = dev_get_drvdata(&pdev->dev);
++
++	if (host->running)
++		clk_disable(host->clk);
++
++	return 0;
++}
++
++static int sunxi_spdif_resume(struct device *dev)
++{
++	struct platform_device *pdev = to_platform_device(dev);
++	struct sunxi_spdif_dev *host = dev_get_drvdata(&pdev->dev);
++
++	if (host->running) {
++		clk_enable(host->clk);
++		sunxi_spdif_configure(host);
++		sunxi_spdif_clock(host, host->saved_params.core_freq,
++				host->saved_params.rate);
++	}
++	return 0;
++}
++
++static SIMPLE_DEV_PM_OPS(spdif_dev_pm_ops, sunxi_spdif_suspend, \
++		sunxi_spdif_resume);
++
++#define SPDIF_DEV_PM_OPS (&spdif_dev_pm_ops)
++#else
++#define SPDIF_DEV_PM_OPS NULL
++
++#endif
++
++static struct platform_driver sunxi_spdif_driver = {
++	.driver		= {
++		.name	= "sunxi-spdif",
++		.owner	= THIS_MODULE,
++		.pm	= SPDIF_DEV_PM_OPS,
++		.of_match_table = of_match_ptr(sunxi_spdif_of_match),
++	},
++	.probe		= sunxi_spdif_probe,
++	//.remove	= sunxi_spdif_remove, // FIXME
++};
++
++module_platform_driver(sunxi_spdif_driver);
++
++MODULE_AUTHOR("Marcus Cooper <codekipper@gmail.com>");
++MODULE_AUTHOR("Andrea Venturi, <be17068@iperbole.bo.it>");
++MODULE_DESCRIPTION("Allwinner Sunxi SPDIF SoC Interface");
++MODULE_LICENSE("GPL");
++MODULE_ALIAS("platform:sunxi-spdif");
